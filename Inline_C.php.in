@@ -1,0 +1,262 @@
+<?php
+/* vim: set expandtab tabstop=4 shiftwidth=4: */
+//
+// +----------------------------------------------------------------------+
+// | Inline_C                                                             |
+// +----------------------------------------------------------------------+
+// | Copyright (c) 1997-2002 The PHP Group                                |
+// +----------------------------------------------------------------------+
+// | This source file is subject to version 2.02 of the PHP license,      |
+// | that is bundled with this package in the file LICENSE, and is        |
+// | available at through the world-wide-web at                           |
+// | http://www.php.net/license/2_02.txt.                                 |
+// | If you did not receive a copy of the PHP license and are unable to   |
+// | obtain it through the world-wide-web, please send a note to          |
+// | license@php.net so we can mail you a copy immediately.               |
+// +----------------------------------------------------------------------+
+// | Authors: George Schlossnagle <george@omniti.com>                     |
+// +----------------------------------------------------------------------+
+//
+// $Id$
+//
+
+/**
+* Inline::Inline_C
+*
+* Purpose:
+*
+*   Allows for definitions of functions in C inline in php code.
+*
+* Example:
+*   a)
+*     require_once 'Inline/Inline_C.php';
+*     $inline = new Inline_C;
+*     
+*    $function1 = <<<EOF
+*    PHP_FUNCTION(times) 
+*    {
+*        long i,j;
+*        if (zend_parse_parameters(ZEND_NUM_ARGS()  TSRMLS_CC, "ll", &i,&j) == FAILURE) {
+*            WRONG_PARAM_COUNT;
+*        }
+*        RETURN_LONG(i*j);
+*    }
+*    $inline = new Inline_C;
+*    $inline->add_code($function1);
+*    $inline->compile();
+*    for($i=0;$i<10;$i++) {
+*        for($j=0; $j<10; $j++) {
+*            print "$i * $j = ".times($i,$j)."\n";
+*        }
+*    }
+*
+*   b)
+*     require_once 'Inline/Inline_C.php';
+*     $inline = new Inline_C;
+*     
+*    $function2 = <<<EOF
+*    include "foo.h"
+*    PHP_FUNCTION(foo) 
+*    {
+*        char *str, *out_str;
+*        int str_len, out_str_len;
+*        if (zend_parse_parameters(ZEND_NUM_ARGS()  TSRMLS_CC, "s", &str,&str_len) == FAILURE) {
+*            WRONG_PARAM_COUNT;
+*        }
+*        foo(&out_str,&str);
+*        out_str_len = strlen(out_str);
+*        RETURN_STRINGL(out_str, out_str_len, 0);
+*    }
+*    EOF
+*    $inline = new Inline_C;
+*    $inline->add_code($function1);
+*    $inline->library("foo", "/usr/local/foo/lib");
+*    $inline->include("/usr/local/foo/include");
+*    $inline->compile();
+*    for($i=0;$i<10;$i++) {
+*        for($j=0; $j<10; $j++) {
+*            print "$i * $j = ".times($i,$j)."\n";
+*        }
+*    }
+*     
+* @author       George Schlossangle <george@omniti.com>
+* @version      $Revision$
+* @access       public
+*/
+
+
+class Inline_C {
+    /**
+    * Creates a C PHP extension on the fly, compiles, caches and dl()'s it.
+    *
+    * @access public
+    */
+
+    var $glue_text;
+    var $build_dir = "@inline_c_builddir@";
+    var $makefile_template = "@inline_c_builddir@/Makefile.tmpl";
+    var $func_text;
+    var $shared_libadd = array();
+    var $preprocessor_text;
+
+    /**
+    * Constructor.  
+    *
+    * @access public
+    */
+
+    function Inline_C() 
+    {
+        // We set glue_text (the extension header), since we seem to 
+        // have problems using a heredoc in the default attribute setting.
+        $this->glue_text = <<<EOF
+#include "php.h"
+#include "php_ini.h"
+#include "ext/standard/info.h"
+
+%s
+
+%s
+
+function_entry __MD5NAME___functions[] = {
+    /* __function_entries_here__ */
+    %s
+    {NULL, NULL, NULL}      /* Must be the last line in extname_functions[] */
+};
+zend_module_entry __MD5NAME___module_entry = {
+#if ZEND_MODULE_API_NO >= 20010901
+    STANDARD_MODULE_HEADER,
+#endif
+    "__MD5NAME__",
+    __MD5NAME___functions,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+#if ZEND_MODULE_API_NO >= 20010901
+    "0.1", /* Replace with version number for your extension */
+#endif
+    STANDARD_MODULE_PROPERTIES
+};
+
+ZEND_GET_MODULE(__MD5NAME__)
+
+EOF;
+}
+
+    /**
+    * Adds code to the preproceesor staanza in our extension.
+    * Used for adding #includes or such
+    *
+    * @param string $code       code to add
+    * @access public
+    */
+
+    function add_preproccesor($code)
+    {
+        $this->preprocessor_text .= $code;
+    }
+    
+    /**
+    * Adds code to our extension.
+    * 
+    * @param string $code       code to add
+    * @access public
+    */
+
+    function add_code($code) 
+    {
+        $this->func_text .= $code;
+    }
+    
+    /**
+    * Adds a library to the link line.  
+    *
+    * @param string $library    library to link against
+    * @param string $path       optional library path, defaults to NULL
+    * @access public
+    */
+
+    function library($library, $path = null) 
+    {
+        $this->shared_libadd[] = "-l$library";
+        if ($path) {
+            $this->shared_libadd[] = "-L$path";
+        }
+    }
+    
+    /**
+    * Adds a library path to the link line
+    *
+    * @param string $path       library path
+    * @access public
+    */
+
+    function library_path($path) 
+    {
+        $this->shared_libadd[] = "-L$path";
+    }
+    
+    /**
+    * Adds an include path to the link line
+    *
+    * @param string $path       include path
+    * @access public
+    */
+
+    function include_path($path) 
+    {
+        $this->shared_libadd[] = "-I$path";
+    }
+
+    /**
+    * Compile and load our code!
+    *
+    * @access public
+    */
+
+    function compile() 
+    {
+        $fd = fopen($this->makefile_template, "r");
+        $makefile_text = fread ($fd, filesize ($this->makefile_template));
+        fclose($fd);
+
+        preg_match_all("/PHP_FUNCTION\((\w+)\)/", $this->func_text, $matches);
+        $functions = array_unique($matches[1]);
+        foreach ($functions as $funcname) {
+            $function_entry_stanza .= "PHP_FE($funcname, NULL)\n";
+            $function_proto_stanza .= "PHP_FUNCTION($funcname);\n";
+        }
+        $body = sprintf($this->glue_text, $this->preprocessor_text,$function_proto_stanza, $function_entry_stanza).$this->func_text;
+        $md5 = md5($body);
+        if (!($extension_dir = ini_get("extension_dir")) || ($extension_dir == './')) {
+            $extension_dir = $this->build_dir;
+        }
+        $extension_dir .= "/inline_libs";
+        if (!is_file("$extension_dir/inline_$md5.so")) {
+            $body = str_replace("__MD5NAME__", "inline_$md5", $body);
+            $makefile_text = str_replace("__MD5NAME__", "inline_$md5", $makefile_text);
+            $makefile_text = str_replace("__SHARED_LIBADD__", join(" ",$this->shared_libadd), $makefile_text);
+            $mkfd = fopen("$this->build_dir/Makefile", "w"); 
+            fwrite($mkfd, $makefile_text);
+            fclose($mkfd);
+            $gluefd = fopen("$this->build_dir/inline_$md5.c", "w");
+            fwrite($gluefd, $body);
+            fclose($gluefd);
+            chdir($this->build_dir);
+            exec('make');
+            copy("$this->build_dir/modules/inline_$md5.so", "$extension_dir/inline_$md5.so");
+            exec('make clean');
+        }
+        if (!($extension_dir = ini_get("extension_dir")) || ($extension_dir == './')) {
+            $cwd = getcwd();
+            chdir($this->build_dir);
+            dl("inline_libs/inline_$md5.so");
+            chdir($cwd);
+        } else {
+            dl("inline_libs/inline_$md5.so");
+        }
+    }
+}
+?>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE package SYSTEM "../../php4/pear/package.dtd">
+<!-- do not use the "Type" attribute here, that one is only for
+     generated package.xml files -->
+<package version "1.0">
+    <name>Inline_C</name>
+    <summary>Allows inline inclusion of function definitions in C</summary>
+    <description>
+The Inline_C class allows for inline inclusion of C code.  This code
+can be compiled and loaded automatically.  Resulting extensions are
+cached to speed future loads.
+    </description>
+    <license>PHP License</license>
+    <maintainers>
+        <maintainer>
+        <user>gschlossnagle</user>
+        <name>George Schlossnagle</name>
+        <email>george@omniti.com</email>
+        </maintainer>
+    </maintainers>
+    <release>
+        <version>0.1</version>
+        <state>experimental</state>
+        <date>2002-09-24</date>
+    </release>
+</package>

@@ -1,0 +1,16 @@
+#!/bin/sh
+if [ -z $1 ]; then
+    echo "You need to specify a build tree dir for runtime builds"
+    exit;
+fi
+inline_c_builddir=$1
+echo $inline_c_builddir
+mkdir -p $inline_c_builddir
+(cd $inline_c_builddir && 
+    echo "PHP_ARG_ENABLE(__MD5NAME__, blah, [--enable-__MD5NAME__ ])
+PHP_NEW_EXTENSION(__MD5NAME__, __MD5NAME__.c, \$ext_shared)
+__MD5NAME___SHARED_LIBADD=\"__SHARED_LIBADD__\"
+PHP_SUBST(__MD5NAME___SHARED_LIBADD)
+" > config.m4 && touch __MD5NAME__.c &&  phpize && ./configure --enable-__MD5NAME__ && mv Makefile Makefile.tmpl)
+cat Inline_C.php.in | sed -e "s#@inline_c_builddir@#$inline_c_builddir#" > Inline_C.php
+echo '<? if(!($extension_dir = ini_get("extension_dir")) || $extension_dir == "./") {mkdir("'${inline_c_builddir}'/inline_libs");} else {mkdir("$extension_dir/inline_libs");} ?>' | php -e
