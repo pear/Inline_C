@@ -2,7 +2,7 @@
 <!DOCTYPE package SYSTEM "../../php4/pear/package.dtd">
 <!-- do not use the "Type" attribute here, that one is only for
      generated package.xml files -->
-<package version "1.0">
+<package version="1.0">
     <name>Inline_C</name>
     <summary>Allows inline inclusion of function definitions in C</summary>
     <description>
