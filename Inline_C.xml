@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="iso-8859-1"?>
-<!-- $Revision: 1.1 $ -->
+<!-- $Revision: 1.2 $ -->
     <reference id="pear.inline_c">
     <title>Inline_C</title>
     <titleabbrev>Inline_C</titleabbrev>
@@ -42,7 +42,7 @@
                 </listitem>
                 <listitem><simpara>
                 If the php.ini value extension_dir is something other that './', then a subdir
-                anme inline_libs of the extension_dir will be created.  This directory must
+                name inline_libs of the extension_dir will be created.  This directory must
                 be writeable by the webserver user.
                 </simpara></listitem>
                 </itemizedlist>
