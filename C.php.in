@@ -20,6 +20,10 @@
 // $Id$
 //
 
+require 'Var_List.php';
+
+define('DEFAULT_TYPEMAP', 'default.tm');
+
 /**
 * Inline::Inline_C
 *
@@ -98,6 +102,7 @@ class Inline_C {
     var $func_text;
     var $shared_libadd = array();
     var $preprocessor_text;
+    var $typemap = array();
 
     /**
     * Constructor.  
@@ -107,6 +112,8 @@ class Inline_C {
 
     function Inline_C() 
     {
+        $this->load_typemap(DEFAULT_TYPEMAP);
+
         // We set glue_text (the extension header), since we seem to 
         // have problems using a heredoc in the default attribute setting.
         $this->glue_text = <<<EOF
@@ -120,7 +127,7 @@ class Inline_C {
 
 function_entry __MD5NAME___functions[] = {
     /* __function_entries_here__ */
-    %s
+%s
     {NULL, NULL, NULL}      /* Must be the last line in extname_functions[] */
 };
 zend_module_entry __MD5NAME___module_entry = {
@@ -210,6 +217,50 @@ EOF;
         $this->shared_libadd[] = "-I$path";
     }
 
+    function load_typemap($file)
+    {
+        if (!is_file($file)) {
+            trigger_error("Cannot read typemap $file", E_USER_WARNING);
+            return;
+        }
+        $typemap = file_get_contents($file);
+
+        preg_match_all(',^([\w\s*]+) \[ \s*
+                         to   \s* \[ \s* ([^]]*) \s* \] \s*
+                         from \s* \[ \s* ([^]]*) \s* \] \s*
+                         spec \s* \[ \s* ([^]]*) \s* \] \s*
+                         \]\s*$,smx', $typemap, $matches, PREG_SET_ORDER);
+        foreach ($matches as $match) {
+			if (empty($match[4])) {
+				trigger_error("Type(s) $match[1] have an empty spec field in typemap $file, not loading\n");
+				continue;
+			}
+            $types = preg_split(',\s+,', $match[1], -1, PREG_SPLIT_NO_EMPTY);
+            foreach ($types as $type) {
+                $this->typemap[$type]['to']   = str_replace('$type', $type, $match[2]);
+                $this->typemap[$type]['from'] = str_replace('$type', $type, $match[3]);
+                $this->typemap[$type]['spec'] = $match[4]{0};
+            }
+        }
+    }
+
+    /**
+     * Bind the code automatically. The code will be scanned for function
+     * definitions and the corresponding PHP glue functions will be generated.
+     *
+     * @param string C code to be bound
+     * @access public
+     */
+    function bind($code)
+    {
+        $funcs = $this->_findFunctionDefs($code);
+
+        $this->func_text .= "\n" . $code . "\n";
+        foreach ($funcs as $name => $func) {
+            $this->func_text .= $this->_generateFunc($func);
+        }
+    }
+
     /**
     * Compile and load our code!
     *
@@ -228,7 +279,7 @@ EOF;
         preg_match_all("/PHP_FUNCTION\((\w+)\)/", $this->func_text, $matches);
         $functions = array_unique($matches[1]);
         foreach ($functions as $funcname) {
-            $function_entry_stanza .= "PHP_FE($funcname, NULL)\n";
+            $function_entry_stanza .= "\tPHP_FE($funcname, NULL)\n";
             $function_proto_stanza .= "PHP_FUNCTION($funcname);\n";
         }
         $body = sprintf($this->glue_text, $this->preprocessor_text,$function_proto_stanza, $function_entry_stanza).$this->func_text;
@@ -254,7 +305,7 @@ EOF;
             fclose($gluefd);
             chdir($this->build_dir);
             exec('make');
-            copy("$this->build_dir/modules/inline_$md5.so", "$extension_dir/inline_$md5.so");
+            copy("modules/inline_$md5.so", "$extension_dir/inline_$md5.so");
             exec('make clean');
         }
         if (!($extension_dir = ini_get("extension_dir")) || ($extension_dir == './')) {
@@ -266,5 +317,123 @@ EOF;
             dl("inline_libs/inline_$md5.so");
         }
     }
+
+    function _findFunctionDefs($source)
+    {
+        $source = $this->_cleanSource($source);
+
+        preg_match_all(',^\s*
+                        ([\w\s*]+\s*)
+                        \s+
+                        (\w+)\s*\(\s*
+                        (.*?)\s*\)
+                        \s*\{,mx', $source, $matches, PREG_SET_ORDER);
+
+        $funcs = array();
+
+        foreach ($matches as $match) {
+            $name = $match[2];
+            $funcs[$name]['name'] = $name;
+            $funcs[$name]['return'] = $match[1];
+            $funcs[$name]['args'] = array();
+            preg_match_all('!([\w\s*]+)\s+([\w+])[\s,]*!', $match[3], $args, PREG_SET_ORDER);
+            foreach ($args as $arg) {
+                $funcs[$name]['args'][] = array('type' => $arg[1],
+                                                'name' => $arg[2]);
+            }
+        }
+
+        return $funcs;
+    }
+
+    function _cleanSource($source)
+    {
+        $search = array(',/\*.*?\*/,s',
+                        ',\\\\\s*\n,',
+                        ',^#.*?$,m',
+                        ',^(typedef|struct|enum) [\w\s]+ ( \{ ( (?>[^{}]+) | (?2))* \} )? .*? ;\s*,smx',
+                        ',\s+,m',
+                        ',(};|[;}])\s*,m',
+                        ',\s+([*&]+)\s*(\w+),'
+                       );
+        $replace = array('', '', '', '', ' ', "$1\n", '$1 $2');
+
+        return preg_replace($search, $replace, $source);
+    }
+
+    function _generateFunc($func)
+    {
+		$spec_format = '';
+		$arg_list = array();
+		$parse_list = array();
+		$var_list = new Var_List();
+
+        ob_start();
+
+		foreach ($func['args'] as $args) {
+			$type_info = @$this->typemap[$args['type']];
+			if (!isset($type_info)) {
+				trigger_error("Unknown type '$args[type]', skipping function $func[name]\n");
+				return;
+			}
+
+			switch ($type_info['spec']) {
+				case 's':
+					$var_list->add($args['type'], $args['name']);
+					$var_list->add('int', $args['name'] . '_lEn');
+					$arg_list[] = $args['name'];
+					$parse_list[] = '&' . $args['name'];
+					$parse_list[] = '&' . $args['name'] . '_lEn';
+					break;
+
+				default:
+					$var_list->add($args['type'], $args['name']);
+					$arg_list[] = $args['name'];
+					$parse_list[] = '&' . $args['name'];
+					break;
+			}
+
+			$spec_format .= $type_info['spec'];
+		}
+
+		echo "PHP_FUNCTION($func[name])\n{\n";
+
+		if ($func['return'] != 'void') {
+			$retval_name = $func['name'] .'_'.  'retval';
+			$var_list->add($func['return'], $retval_name);
+		}
+
+		echo $var_list->to_string();
+		$parse_list_string = implode(', ', $parse_list);
+		$arg_list_string = implode(', ', $arg_list);
+
+		echo <<<EOD
+    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "$spec_format", $parse_list_string) == FAILURE) {
+        return;
+    }\n\n
+EOD;
+
+		if ($func['return'] != 'void') {
+			echo "    $retval_name = $func[name]($arg_list_string);\n\n";
+			echo '    ', $this->_formatTypeConv($this->typemap[$func['return']]['from'], $retval_name, 'return_value'), "\n";
+		} else {
+			echo "    $func[name]($arg_list_string);\n";
+		}
+
+		echo "}\n\n";
+
+        $func_source = ob_get_contents();
+        ob_end_clean();
+
+        return $func_source;
+    }
+
+	function _formatTypeConv($type_conv, $arg, $var)
+	{
+		$type_conv = str_replace('$arg', $arg, $type_conv);
+		$type_conv = str_replace('$var', $var, $type_conv);
+		return $type_conv;
+	}
+
 }
 ?>

@@ -28,6 +28,22 @@ EOF;
 $inline = new Inline_C;
 $inline->add_code($function1);
 $inline->add_code($function2);
+$inline->bind(<<<EOD
+int hash(char* str)
+{
+	int str_l = strlen(str);
+	int i;
+	int sum = 0;
+
+	for (i = 0; i < str_l; i++) {
+		sum += str[i];
+	}
+
+	return sum;
+}
+EOD
+);
+
 // To link against libfoo
 //$inline->library("sp","/usr/local/lib");
 $inline->compile();
@@ -39,5 +55,7 @@ for($i=0;$i<10;$i++) {
 for($i=0;$i<10; $i++) {
     print "$i^3 = ".cube($i)."\n";
 }
+
+echo 'hash for "PHP" is ', hash('PHP'), "\n";
 
 ?>
