@@ -15,6 +15,7 @@
 // | license@php.net so we can mail you a copy immediately.               |
 // +----------------------------------------------------------------------+
 // | Authors: George Schlossnagle <george@omniti.com>                     |
+// |          Andrei Zmievski <andrei@gravitonic.com>                     |
 // +----------------------------------------------------------------------+
 //
 // $Id$
