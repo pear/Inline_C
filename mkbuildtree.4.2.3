@@ -18,5 +18,5 @@ LTLIBRARY_SHARED_LIBADD = \"__SHARED_LIBADD__\"
 
 include \$(top_srcdir)/build/dynlib.mk"  > Makefile.in &&
 phpize && ./configure --enable-__MD5NAME__ && mv Makefile Makefile.tmpl)
-cat Inline_C.php.in | sed -e "s#@inline_c_builddir@#$inline_c_builddir#" > Inline_C.php
+cat C.php.in | sed -e "s#@inline_c_builddir@#$inline_c_builddir#" > C.php
 echo '<? if(!($extension_dir = ini_get("extension_dir")) || $extension_dir == "./") {mkdir("'${inline_c_builddir}'/inline_libs");} else {mkdir("$extension_dir/inline_libs");} ?>' | php -e

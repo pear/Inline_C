@@ -1,6 +1,6 @@
 <?
 
-require_once("Inline_C.php");
+require_once("C.php");
 $function1 = <<<EOF
 PHP_FUNCTION(times) 
 {
