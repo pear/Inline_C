@@ -1,0 +1,25 @@
+{
+    "authors": [
+        {
+            "email": "george@omniti.com",
+            "name": "George Schlossnagle",
+            "role": "Lead"
+        }
+    ],
+    "autoload": {
+        "classmap": [
+            "./"
+        ]
+    },
+    "description": "More info available on: http://pear.php.net/package/Inline_C",
+    "license": "PHP License",
+    "name": "pear/inline_c",
+    "support": {
+        "issues": "http:///bugs/search.php?cmd=display&package_name[]=Inline_C",
+        "source": "https://github.com/pear/Inline_C"
+    },
+    "type": "library",
+    "require-dev": {
+        "phpunit/phpunit": "*"
+    }
+}
